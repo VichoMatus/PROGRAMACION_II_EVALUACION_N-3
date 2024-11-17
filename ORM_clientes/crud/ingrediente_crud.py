@@ -1,67 +1,95 @@
-#Martin
-
 from sqlalchemy.orm import Session
-from models import Ingrediente  # Asegúrate de que Ingrediente esté definido en models.py
 from sqlalchemy.exc import IntegrityError
+from models import Ingrediente, menu_ingredientes
+from database import engine
+
+Session = Session(bind=engine)
+conexion = Session()
 
 class IngredienteCRUDException(Exception):
     pass
 
-def crear_ingrediente(session: Session, nombre: str, tipo: str, cantidad: float, unidad: str):
+def crear_ingrediente(nombre: str, tipo: str, unidad_medida: str, cantidad: int):
 
     try:
-        # Verificar si el ingrediente ya existe
-        ingrediente_existente = session.query(Ingrediente).filter_by(nombre=nombre, tipo=tipo).first()
-        if ingrediente_existente:
-            raise IngredienteCRUDException("El ingrediente con este nombre y tipo ya existe.")
+        if conexion.query(Ingrediente).filter_by(nombre=nombre).first():
+            raise IngredienteCRUDException(f"El ingrediente '{nombre}' ya existe.")
         
-        # Crear un nuevo ingrediente
-        nuevo_ingrediente = Ingrediente(nombre=nombre, tipo=tipo, cantidad=cantidad, unidad=unidad)
-        session.add(nuevo_ingrediente)
-        session.commit()
+        nuevo_ingrediente = Ingrediente(nombre=nombre, tipo=tipo, unidad_medida=unidad_medida, cantidad=cantidad)
+        conexion.add(nuevo_ingrediente)
+        conexion.commit()
         return nuevo_ingrediente
+
     except IntegrityError:
-        session.rollback()
-        raise IngredienteCRUDException("Error al crear el ingrediente.")
+        conexion.rollback()
+        raise IngredienteCRUDException("Error de integridad al crear el ingrediente.")
+    except Exception as e:
+        conexion.rollback()
+        raise IngredienteCRUDException(f"Error inesperado: {e}")
 
-def obtener_ingredientes(session: Session):
-    """Obtiene todos los ingredientes registrados. """
-    return session.query(Ingrediente).all()
+def listar_ingredientes():
 
-def obtener_ingrediente_por_id(session: Session, ingrediente_id: int):
-    """Obtiene un ingrediente específico por su ID. """
-    return session.query(Ingrediente).filter_by(id=ingrediente_id).first()
+    try:
+        ingredientes = conexion.query(Ingrediente).all()
+        for ingrediente in ingredientes:
+            print(f"ID: {ingrediente.id}, Nombre: {ingrediente.nombre}, Tipo: {ingrediente.tipo}, Cantidad: {ingrediente.cantidad}, Unidad: {ingrediente.unidad_medida}")
+        return ingredientes
 
-def actualizar_ingrediente(session: Session, ingrediente_id: int, nombre: str = None, tipo: str = None, cantidad: float = None, unidad: str = None):
-    """Actualiza los datos de un ingrediente."""
-    ingrediente = obtener_ingrediente_por_id(session, ingrediente_id)
-    if not ingrediente:
-        return None  # Ingrediente no encontrado
+    except Exception as e:
+        raise IngredienteCRUDException(f"Error al listar ingredientes: {e}")
 
-    if nombre and tipo:
-        # Verificar si el nombre y tipo ya están en uso
-        ingrediente_existente = session.query(Ingrediente).filter_by(nombre=nombre, tipo=tipo).first()
-        if ingrediente_existente and ingrediente_existente.id != ingrediente_id:
-            raise IngredienteCRUDException("Otro ingrediente ya tiene este nombre y tipo.")
-    
-    if nombre:
-        ingrediente.nombre = nombre
-    if tipo:
-        ingrediente.tipo = tipo
-    if cantidad is not None:
-        ingrediente.cantidad = cantidad
-    if unidad:
-        ingrediente.unidad = unidad
-    
-    session.commit()
-    return ingrediente
+def buscar_ingrediente_por_id(ingrediente_id: int):
 
-def eliminar_ingrediente(session: Session, ingrediente_id: int):
-    """Elimina un ingrediente por su ID."""
-    ingrediente = obtener_ingrediente_por_id(session, ingrediente_id)
-    if not ingrediente:
-        return False  # Ingrediente no encontrado
-    
-    session.delete(ingrediente)
-    session.commit()
-    return True
+    try:
+        ingrediente = conexion.query(Ingrediente).filter_by(id=ingrediente_id).first()
+        if not ingrediente:
+            raise IngredienteCRUDException(f"Ingrediente con ID {ingrediente_id} no encontrado.")
+        return ingrediente
+
+    except Exception as e:
+        raise IngredienteCRUDException(f"Error al buscar el ingrediente: {e}")
+
+def actualizar_ingrediente(ingrediente_id: int, nombre: str = None, tipo: str = None, unidad_medida: str = None, cantidad: int = None):
+
+    try:
+        ingrediente = buscar_ingrediente_por_id(ingrediente_id)
+
+        if nombre:
+            if conexion.query(Ingrediente).filter_by(nombre=nombre).first() and nombre != ingrediente.nombre:
+                raise IngredienteCRUDException(f"El ingrediente con el nombre '{nombre}' ya existe.")
+            ingrediente.nombre = nombre
+        if tipo:
+            ingrediente.tipo = tipo
+        if unidad_medida:
+            ingrediente.unidad_medida = unidad_medida
+        if cantidad is not None:
+            ingrediente.cantidad = cantidad
+        
+        conexion.commit()
+        return ingrediente
+
+    except IngredienteCRUDException as e:
+        conexion.rollback()
+        raise e
+    except Exception as e:
+        conexion.rollback()
+        raise IngredienteCRUDException(f"Error inesperado al actualizar el ingrediente: {e}")
+
+def eliminar_ingrediente(ingrediente_id: int):
+
+    try:
+        ingrediente = buscar_ingrediente_por_id(ingrediente_id)
+
+        if conexion.query(menu_ingredientes).filter_by(ingrediente_id=ingrediente.id).first():
+            raise IngredienteCRUDException(f"No se puede eliminar el ingrediente '{ingrediente.nombre}' porque está asociado a un menú.")
+
+        conexion.delete(ingrediente)
+        conexion.commit()
+        print(f"Ingrediente con ID {ingrediente_id} eliminado correctamente.")
+
+    except IngredienteCRUDException as e:
+        conexion.rollback()
+        raise e
+    except Exception as e:
+        conexion.rollback()
+        raise IngredienteCRUDException(f"Error inesperado al eliminar el ingrediente: {e}")
