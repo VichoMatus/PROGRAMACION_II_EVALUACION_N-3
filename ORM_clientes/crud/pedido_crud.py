@@ -1,4 +1,3 @@
-#Yadhira
 from sqlalchemy.orm import Session
 from sqlalchemy.sql import func
 from models import Pedido
@@ -45,3 +44,4 @@ def eliminar_pedido(db: Session, pedido_id: int):
         db.commit()
         return True
     return False
+
