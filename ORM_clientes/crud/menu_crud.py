@@ -1,59 +1,105 @@
-from sqlalchemy.orm import sessionmaker
-from database import engine
-from models import Menu, Ingrediente
+#Elias
 
-# Se configura la sesión de la base de datos para gestionar las operaciones
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy.exc import IntegrityError, NoResultFound
+from database import engine
+from models import Menu, Ingrediente,menu_ingredientes
+
 Session = sessionmaker(bind=engine)
 conexion = Session()
 
-# Crea un nuevo menú con sus ingredientes
-def crear_menu(nombre_menu, descripcion_menu, lista_ingredientes):
-    menu_nuevo = Menu(nombre=nombre_menu, descripcion=descripcion_menu)
-    for nombre_ingrediente, cantidad in lista_ingredientes.items():
-        menu_nuevo.ingredientes.append(Ingrediente(nombre=nombre_ingrediente, cantidad=cantidad))
-    conexion.add(menu_nuevo)
-    conexion.commit()
-    print(f"Menú '{nombre_menu}' creado exitosamente.")
+class MenuCRUDException(Exception):
+    pass
 
-# Se lista todos los menús existentes junto con sus ingredientes
+def crear_menu(nombre_menu: str, descripcion_menu: str, lista_ingredientes: dict):
+
+    try:
+        menu_nuevo = Menu(nombre=nombre_menu, descripcion=descripcion_menu)
+
+        # Verificar y asociar ingredientes con cantidades requeridas
+        for nombre_ingrediente, cantidad in lista_ingredientes.items():
+            ingrediente = conexion.query(Ingrediente).filter_by(nombre=nombre_ingrediente).first()
+            if not ingrediente:
+                raise MenuCRUDException(f"Ingrediente '{nombre_ingrediente}' no existe.")
+            # Agregar al menú con la cantidad requerida
+            menu_nuevo.ingredientes.append(ingrediente)
+            conexion.execute(menu_ingredientes.insert().values(
+                menu_id=menu_nuevo.id,
+                ingrediente_id=ingrediente.id,
+                cantidad_requerida=cantidad
+            ))
+        
+        conexion.add(menu_nuevo)
+        conexion.commit()
+        return menu_nuevo
+
+    except IntegrityError:
+        conexion.rollback()
+        raise MenuCRUDException("Error de integridad al crear el menú.")
+    except Exception as e:
+        conexion.rollback()
+        raise MenuCRUDException(f"Error inesperado: {e}")
+
+
 def listar_menus():
-    menus = conexion.query(Menu).all()
-    for menu in menus:
-        print(f"ID: {menu.id}, Nombre: {menu.nombre}, Descripción: {menu.descripcion}")
-        for ingrediente in menu.ingredientes:
-            print(f"  - {ingrediente.nombre}: {ingrediente.cantidad}")
-    return menus
+ 
+    try:
+        menus = conexion.query(Menu).all()
+        for menu in menus:
+            print(f"ID: {menu.id}, Nombre: {menu.nombre}, Descripción: {menu.descripcion}")
+            for ingrediente in menu.ingredientes:
+                print(f"  - Ingrediente: {ingrediente.nombre}, Cantidad: {ingrediente.cantidad}")
+        return menus
 
-# Actualiza un menú existente usando su ID
-def actualizar_menu(id_menu, nuevo_nombre=None, nueva_descripcion=None, nuevos_ingredientes=None):
-    # Buscamos el menú específico que queremos actualizar
-    menu = conexion.query(Menu).filter(Menu.id == id_menu).first()
-    if menu:
+    except Exception as e:
+        raise MenuCRUDException(f"Error al listar menús: {e}")
+
+def buscar_menu_por_id(menu_id: int):
+
+    try:
+        menu = conexion.query(Menu).filter_by(id=menu_id).first()
+        if not menu:
+            raise MenuCRUDException(f"Menú con ID {menu_id} no encontrado.")
+        return menu
+    except Exception as e:
+        raise MenuCRUDException(f"Error al buscar el menú: {e}")
+
+def actualizar_menu(menu_id: int, nuevo_nombre: str = None, nueva_descripcion: str = None, nuevos_ingredientes: dict = None):
+
+    try:
+        menu = buscar_menu_por_id(menu_id)
+
         if nuevo_nombre:
             menu.nombre = nuevo_nombre
         if nueva_descripcion:
             menu.descripcion = nueva_descripcion
         if nuevos_ingredientes:
-            menu.ingredientes.clear()  # Limpiamos los ingredientes actuales
+            menu.ingredientes.clear()
             for nombre_ingrediente, cantidad in nuevos_ingredientes.items():
-                menu.ingredientes.append(Ingrediente(nombre=nombre_ingrediente, cantidad=cantidad))
+                ingrediente = conexion.query(Ingrediente).filter_by(nombre=nombre_ingrediente).first()
+                if not ingrediente:
+                    raise MenuCRUDException(f"Ingrediente '{nombre_ingrediente}' no existe.")
+                menu.ingredientes.append(ingrediente)
+        
         conexion.commit()
-        print(f"Menú '{menu.nombre}' actualizado exitosamente.")
-    else:
-        print("Menú no encontrado.")
+        return menu
+    except MenuCRUDException as e:
+        conexion.rollback()
+        raise e
+    except Exception as e:
+        conexion.rollback()
+        raise MenuCRUDException(f"Error inesperado al actualizar el menú: {e}")
 
-# Elimina un menú por su ID
-def eliminar_menu(id_menu):
-    # Buscamos el menú específico que queremos eliminar
-    menu = conexion.query(Menu).filter(Menu.id == id_menu).first()
-    if menu:
-        # Eliminamos el menú de la base de datos
+def eliminar_menu(menu_id: int):
+
+    try:
+        menu = buscar_menu_por_id(menu_id)
         conexion.delete(menu)
         conexion.commit()
-        print(f"Menú '{menu.nombre}' eliminado exitosamente.")
-    else:
-        print("Menú no encontrado.")
-
-# Función para cerrar la sesión de conexión con la base de datos
-def cerrar_conexion():
-    conexion.close()
+        print(f"Menú con ID {menu_id} eliminado correctamente.")
+    except MenuCRUDException as e:
+        conexion.rollback()
+        raise e
+    except Exception as e:
+        conexion.rollback()
+        raise MenuCRUDException(f"Error inesperado al eliminar el menú: {e}")
