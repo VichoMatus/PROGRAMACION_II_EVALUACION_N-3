@@ -1,14 +1,14 @@
-from sqlalchemy import Column, String, Integer, ForeignKey, Table, DateTime
+from sqlalchemy import Column, String, Integer, ForeignKey, Table, DateTime, CheckConstraint
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
-from database import Base, engine  # Importar Base y engine desde database.py
+from database import Base, engine
 
 # Tabla intermedia para la relación muchos-a-muchos entre Menu e Ingrediente
 menu_ingredientes = Table(
     'menu_ingredientes', Base.metadata,
     Column('menu_id', Integer, ForeignKey('menus.id'), primary_key=True),
     Column('ingrediente_id', Integer, ForeignKey('ingredientes.id'), primary_key=True),
-    Column('cantidad_requerida', Integer, nullable=False)  # Cantidad requerida de cada ingrediente en un menú
+    Column('cantidad_requerida', Integer, nullable=False, default=0)
 )
 
 # Clase Cliente
@@ -23,29 +23,35 @@ class Cliente(Base):
 class Pedido(Base):
     __tablename__ = 'pedidos'
     
-    id = Column(Integer, primary_key=True)  # Identificador único del pedido, autoincrement automático
+    id = Column(Integer, primary_key=True)  # Identificador único del pedido
     descripcion = Column(String(255), nullable=False)  # Descripción del pedido
     cliente_email = Column(String(255), ForeignKey('clientes.email', onupdate="CASCADE"), nullable=False)  # Clave foránea
     cliente = relationship("Cliente", back_populates="pedidos")
     fecha_creacion = Column(DateTime, default=func.now())  # Fecha de creación del pedido
-    cantidad_menus = Column(Integer, nullable=False)  # Cantidad de menús comprados
+    cantidad_menus = Column(Integer, nullable=False)
+    __table_args__ = (
+        CheckConstraint(cantidad_menus > 0, name="check_cantidad_menus_positiva"),
+    )
 
 # Clase Ingrediente
 class Ingrediente(Base):
     __tablename__ = 'ingredientes'
     
-    id = Column(Integer, primary_key=True)  # Identificador único del ingrediente, autoincrement automático
+    id = Column(Integer, primary_key=True)  # Identificador único del ingrediente
     nombre = Column(String(255), nullable=False, unique=True)  # Nombre único del ingrediente
     tipo = Column(String(255), nullable=False)  # Tipo del ingrediente (Vegetal, Proteína, etc.)
     unidad_medida = Column(String(50), nullable=False)  # Unidad de medida (g, ml, unidad, etc.)
-    cantidad = Column(Integer, nullable=False)  # Cantidad disponible en el inventario
+    cantidad = Column(Integer, nullable=False, default=0)  # Cantidad disponible
     menus = relationship("Menu", secondary=menu_ingredientes, back_populates="ingredientes")
+    __table_args__ = (
+        CheckConstraint(cantidad >= 0, name="check_cantidad_no_negativa"),
+    )
 
 # Clase Menu
 class Menu(Base):
     __tablename__ = 'menus'
     
-    id = Column(Integer, primary_key=True)  # Identificador único del menú, autoincrement automático
+    id = Column(Integer, primary_key=True)  # Identificador único del menú
     nombre = Column(String(255), nullable=False, unique=True)  # Nombre único del menú
     descripcion = Column(String(255), nullable=False)  # Descripción del menú
     ingredientes = relationship("Ingrediente", secondary=menu_ingredientes, back_populates="menus")

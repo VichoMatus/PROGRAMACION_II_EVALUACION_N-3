@@ -9,10 +9,22 @@ class ClienteCRUD:
     def __init__(self, db: Session):
         self.db = db
 
+
+    def _buscar_cliente_por_email(self, email: str):
+        return self.db.query(Cliente).filter(Cliente.email == email).first()
+
+    def _validar_datos_cliente(self, email: str, nombre: str):
+        if not email or "@" not in email:
+            raise ClienteCRUDException("El email proporcionado no es válido.")
+        if not nombre or len(nombre.strip()) == 0:
+            raise ClienteCRUDException("El nombre no puede estar vacío.")
+
     def crear_cliente(self, email: str, nombre: str):
+        self._validar_datos_cliente(email, nombre)
         try:
-            # Verificar si ya existe un cliente con el mismo correo electrónico
-            if self.db.query(Cliente).filter_by(email=email).first():
+            if self._buscar_cliente_por_email(email):
+
+
                 raise ClienteCRUDException(f"El cliente con email '{email}' ya existe.")
             
             cliente = Cliente(email=email, nombre=nombre)
@@ -42,37 +54,54 @@ class ClienteCRUD:
         except Exception as e:
             raise ClienteCRUDException(f"Error al buscar el cliente: {e}")
 
-    def actualizar_cliente(self, email: str, nombre: str = None):
+    def actualizar_cliente(self, email_actual: str, nuevo_nombre: str = None, nuevo_email: str = None):
+        if nuevo_nombre and len(nuevo_nombre.strip()) == 0:
+            raise ClienteCRUDException("El nombre no puede estar vacío.")
+        if nuevo_email and "@" not in nuevo_email:
+            raise ClienteCRUDException("El email proporcionado no es válido.")
+        
         try:
-            cliente = self.db.query(Cliente).filter(Cliente.email == email).first()
+            cliente = self._buscar_cliente_por_email(email_actual)
             if not cliente:
-                raise ClienteCRUDException(f"Cliente con email '{email}' no encontrado.")
-            
-            if nombre:
-                cliente.nombre = nombre
+                raise ClienteCRUDException(f"Cliente con email '{email_actual}' no encontrado.")
+
+            # Validar nuevo email si es diferente al actual
+            if nuevo_email and nuevo_email != email_actual:
+                if self._buscar_cliente_por_email(nuevo_email):
+                    raise ClienteCRUDException(f"El email '{nuevo_email}' ya está registrado.")
+
+            if nuevo_nombre:
+                cliente.nombre = nuevo_nombre
+            if nuevo_email:
+                cliente.email = nuevo_email
+
             
             self.db.commit()
             self.db.refresh(cliente)
             return cliente
-        except ClienteCRUDException as e:
-            self.db.rollback()
-            raise e
+
         except Exception as e:
             self.db.rollback()
-            raise ClienteCRUDException(f"Error inesperado al actualizar el cliente: {e}")
+            raise ClienteCRUDException(f"Error al actualizar el cliente: {e}")
 
     def eliminar_cliente(self, email: str):
         try:
-            cliente = self.db.query(Cliente).filter(Cliente.email == email).first()
+            cliente = self._buscar_cliente_por_email(email)
+
             if not cliente:
                 raise ClienteCRUDException(f"Cliente con email '{email}' no encontrado.")
             
             self.db.delete(cliente)
             self.db.commit()
             return True
-        except ClienteCRUDException as e:
-            self.db.rollback()
-            raise e
+
         except Exception as e:
             self.db.rollback()
-            raise ClienteCRUDException(f"Error inesperado al eliminar el cliente: {e}")
+            raise ClienteCRUDException(f"Error al eliminar el cliente: {e}")
+
+    def buscar_clientes_por_nombre(self, nombre: str):
+        try:
+            return self.db.query(Cliente).filter(Cliente.nombre.ilike(f"%{nombre}%")).all()
+        except Exception as e:
+            raise ClienteCRUDException(f"Error al buscar clientes por nombre: {e}")
+

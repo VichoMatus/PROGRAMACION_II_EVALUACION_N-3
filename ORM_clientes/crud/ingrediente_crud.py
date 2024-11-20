@@ -11,8 +11,13 @@ class IngredienteCRUD:
         self.conexion = Session(bind=engine)
 
     def crear_ingrediente(self, nombre: str, tipo: str, unidad_medida: str, cantidad: int):
+        if not nombre or len(nombre.strip()) == 0:
+            raise IngredienteCRUDException("El nombre del ingrediente no puede estar vacío.")
+        if cantidad is not None and cantidad < 0:
+            raise IngredienteCRUDException("La cantidad no puede ser negativa.")
+
         try:
-            if self.conexion.query(Ingrediente).filter_by(nombre=nombre).first():
+            if self._buscar_ingrediente_por_nombre(nombre):
                 raise IngredienteCRUDException(f"El ingrediente '{nombre}' ya existe.")
             
             nuevo_ingrediente = Ingrediente(
@@ -30,10 +35,8 @@ class IngredienteCRUD:
 
     def listar_ingredientes(self):
         try:
-            ingredientes = self.conexion.query(Ingrediente).all()
-            for ingrediente in ingredientes:
-                print(f"ID: {ingrediente.id}, Nombre: {ingrediente.nombre}, Tipo: {ingrediente.tipo}, Cantidad: {ingrediente.cantidad}, Unidad: {ingrediente.unidad_medida}")
-            return ingredientes
+            return self.conexion.query(Ingrediente).all()
+
         except Exception as e:
             raise IngredienteCRUDException(f"Error al listar ingredientes: {e}")
 
@@ -47,11 +50,15 @@ class IngredienteCRUD:
             raise IngredienteCRUDException(f"Error al buscar el ingrediente: {e}")
 
     def actualizar_ingrediente(self, ingrediente_id: int, nombre: str = None, tipo: str = None, unidad_medida: str = None, cantidad: int = None):
+
+        if cantidad is not None and cantidad < 0:
+            raise IngredienteCRUDException("La cantidad no puede ser negativa.")
+
         try:
             ingrediente = self.buscar_ingrediente_por_id(ingrediente_id)
 
-            if nombre:
-                if self.conexion.query(Ingrediente).filter_by(nombre=nombre).first() and nombre != ingrediente.nombre:
+            if nombre and nombre != ingrediente.nombre:
+                if self._buscar_ingrediente_por_nombre(nombre):
                     raise IngredienteCRUDException(f"El ingrediente con el nombre '{nombre}' ya existe.")
                 ingrediente.nombre = nombre
             if tipo:
@@ -79,10 +86,23 @@ class IngredienteCRUD:
 
             self.conexion.delete(ingrediente)
             self.conexion.commit()
-            print(f"Ingrediente con ID {ingrediente_id} eliminado correctamente.")
+
+            return f"Ingrediente con ID {ingrediente_id} eliminado correctamente."
+
         except IngredienteCRUDException as e:
             self.conexion.rollback()
             raise e
         except Exception as e:
             self.conexion.rollback()
             raise IngredienteCRUDException(f"Error inesperado al eliminar el ingrediente: {e}")
+
+
+    def _buscar_ingrediente_por_nombre(self, nombre: str):
+        """Método interno para buscar un ingrediente por su nombre."""
+        return self.conexion.query(Ingrediente).filter_by(nombre=nombre).first()
+
+    def cerrar_sesion(self):
+        """Cierra la sesión de la conexión."""
+        self.conexion.close()
+
+        
