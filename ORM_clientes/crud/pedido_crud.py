@@ -2,46 +2,100 @@ from sqlalchemy.orm import Session
 from sqlalchemy.sql import func
 from models import Pedido
 
-def crear_pedido(db: Session, descripcion: str, cliente_email: str, cantidad_menus: int):
-    """Crea un nuevo pedido."""
-    nuevo_pedido = Pedido(
-        descripcion=descripcion,
-        cliente_email=cliente_email,
-        cantidad_menus=cantidad_menus,
-        fecha_creacion=func.now()  # Fecha actual
-    )
-    db.add(nuevo_pedido)
-    db.commit()
-    db.refresh(nuevo_pedido)
-    return nuevo_pedido
+class PedidoCRUDException(Exception):
+    pass
 
-def obtener_pedidos(db: Session):
-    """Obtiene todos los pedidos de la base de datos."""
-    return db.query(Pedido).all()
+class PedidoCRUD:
+    def __init__(self, db: Session):
+        self.db = db
 
-def obtener_pedidos_por_cliente(db: Session, cliente_email: str):
-    """Obtiene todos los pedidos de un cliente específico."""
-    return db.query(Pedido).filter(Pedido.cliente_email == cliente_email).all()
+    def _buscar_pedido_por_id(self, pedido_id: int):
+        """Busca un pedido por su ID."""
+        return self.db.query(Pedido).filter(Pedido.id == pedido_id).first()
 
-def actualizar_pedido(db: Session, pedido_id: int, descripcion: str = None, cantidad_menus: int = None):
-    """Actualiza un pedido existente."""
-    pedido = db.query(Pedido).filter(Pedido.id == pedido_id).first()
-    if not pedido:
-        return None
-    if descripcion:
-        pedido.descripcion = descripcion
-    if cantidad_menus:
-        pedido.cantidad_menus = cantidad_menus
-    db.commit()
-    db.refresh(pedido)
-    return pedido
+    def _buscar_pedidos_por_cliente(self, cliente_email: str):
+        """Busca pedidos por el email del cliente."""
+        return self.db.query(Pedido).filter(Pedido.cliente_email == cliente_email).all()
 
-def eliminar_pedido(db: Session, pedido_id: int):
-    """Elimina un pedido por su ID."""
-    pedido = db.query(Pedido).filter(Pedido.id == pedido_id).first()
-    if pedido:
-        db.delete(pedido)
-        db.commit()
-        return True
-    return False
+    def crear_pedido(self, descripcion: str, cliente_email: str, cantidad_menus: int):
+        """Crea un nuevo pedido."""
+        if cantidad_menus <= 0:
+            raise PedidoCRUDException("La cantidad de menús debe ser mayor a 0.")
+        if len(descripcion.strip()) == 0:
+            raise PedidoCRUDException("La descripción no puede estar vacía.")
+        
 
+        try:
+            nuevo_pedido = Pedido(
+                descripcion=descripcion,
+                cliente_email=cliente_email,
+                cantidad_menus=cantidad_menus,
+                fecha_creacion=func.now()
+
+            )
+            self.db.add(nuevo_pedido)
+            self.db.commit()
+            self.db.refresh(nuevo_pedido)
+            return nuevo_pedido
+        except Exception as e:
+            self.db.rollback()
+            raise PedidoCRUDException(f"Error al crear el pedido: {e}")
+
+    def obtener_pedidos(self):
+        """Obtiene todos los pedidos."""
+
+        try:
+            return self.db.query(Pedido).all()
+        except Exception as e:
+            raise PedidoCRUDException(f"Error al obtener los pedidos: {e}")
+
+    def obtener_pedidos_por_cliente(self, cliente_email: str):
+        """Obtiene todos los pedidos de un cliente específico."""
+        try:
+            pedidos = self._buscar_pedidos_por_cliente(cliente_email)
+
+            if not pedidos:
+                raise PedidoCRUDException(f"No se encontraron pedidos para el cliente con email '{cliente_email}'.")
+            return pedidos
+        except Exception as e:
+            raise PedidoCRUDException(f"Error al obtener los pedidos del cliente: {e}")
+
+    def actualizar_pedido(self, pedido_id: int, descripcion: str = None, cantidad_menus: int = None):
+        """Actualiza un pedido existente."""
+        if cantidad_menus is not None and cantidad_menus <= 0:
+            raise PedidoCRUDException("La cantidad de menús debe ser mayor a 0.")
+        if descripcion and len(descripcion.strip()) == 0:
+            raise PedidoCRUDException("La descripción no puede estar vacía.")
+
+        try:
+            pedido = self._buscar_pedido_por_id(pedido_id)
+
+            if not pedido:
+                raise PedidoCRUDException(f"Pedido con ID {pedido_id} no encontrado.")
+            
+            if descripcion:
+                pedido.descripcion = descripcion
+            if cantidad_menus:
+                pedido.cantidad_menus = cantidad_menus
+
+            self.db.commit()
+            self.db.refresh(pedido)
+            return pedido
+        except Exception as e:
+            self.db.rollback()
+            raise PedidoCRUDException(f"Error al actualizar el pedido: {e}")
+
+    def eliminar_pedido(self, pedido_id: int):
+        """Elimina un pedido existente."""
+        try:
+            pedido = self._buscar_pedido_por_id(pedido_id)
+
+            if not pedido:
+                raise PedidoCRUDException(f"Pedido con ID {pedido_id} no encontrado.")
+            
+            self.db.delete(pedido)
+            self.db.commit()
+            return True
+        except Exception as e:
+            self.db.rollback()
+            raise PedidoCRUDException(f"Error al eliminar el pedido: {e}")
