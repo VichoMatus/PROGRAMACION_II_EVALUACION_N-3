@@ -12,6 +12,7 @@ class MenuCRUD:
     def __init__(self):
         self.conexion = Session()
 
+
     def _buscar_ingrediente_por_nombre(self, nombre_ingrediente: str):
         """Busca un ingrediente por su nombre."""
         return self.conexion.query(Ingrediente).filter_by(nombre=nombre_ingrediente).first()
@@ -19,6 +20,7 @@ class MenuCRUD:
     def _buscar_menu_por_id(self, menu_id: int):
         """Busca un menú por su ID."""
         return self.conexion.query(Menu).filter_by(id=menu_id).first()
+
 
     def crear_menu(self, nombre_menu: str, descripcion_menu: str, lista_ingredientes: dict):
         try:
@@ -41,6 +43,7 @@ class MenuCRUD:
             self.conexion.add(menu_nuevo)
             self.conexion.commit()
             return menu_nuevo
+
         except IntegrityError:
             self.conexion.rollback()
             raise MenuCRUDException("Error de integridad al crear el menú.")
@@ -51,12 +54,14 @@ class MenuCRUD:
     def listar_menus(self):
         try:
             return self.conexion.query(Menu).all()
+
         except Exception as e:
             raise MenuCRUDException(f"Error al listar menús: {e}")
 
     def buscar_menu_por_id(self, menu_id: int):
         try:
             menu = self._buscar_menu_por_id(menu_id)
+
             if not menu:
                 raise MenuCRUDException(f"Menú con ID {menu_id} no encontrado.")
             return menu
@@ -69,6 +74,7 @@ class MenuCRUD:
             if not menu:
                 raise MenuCRUDException(f"Menú con ID {menu_id} no encontrado.")
 
+
             if nuevo_nombre:
                 menu.nombre = nuevo_nombre
             if nueva_descripcion:
@@ -79,12 +85,14 @@ class MenuCRUD:
                     if cantidad <= 0:
                         raise MenuCRUDException(f"La cantidad para '{nombre_ingrediente}' debe ser mayor a cero.")
                     ingrediente = self._buscar_ingrediente_por_nombre(nombre_ingrediente)
+
                     if not ingrediente:
                         raise MenuCRUDException(f"Ingrediente '{nombre_ingrediente}' no existe.")
                     menu.ingredientes.append(ingrediente)
 
             self.conexion.commit()
             return menu
+
         except Exception as e:
             self.conexion.rollback()
             raise MenuCRUDException(f"Error inesperado al actualizar el menú: {e}")
@@ -105,3 +113,4 @@ class MenuCRUD:
     def cerrar_sesion(self):
         """Cierra la sesión de la conexión."""
         self.conexion.close()
+

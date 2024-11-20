@@ -24,12 +24,14 @@ class PedidoCRUD:
         if len(descripcion.strip()) == 0:
             raise PedidoCRUDException("La descripción no puede estar vacía.")
         
+
         try:
             nuevo_pedido = Pedido(
                 descripcion=descripcion,
                 cliente_email=cliente_email,
                 cantidad_menus=cantidad_menus,
                 fecha_creacion=func.now()
+
             )
             self.db.add(nuevo_pedido)
             self.db.commit()
@@ -41,6 +43,7 @@ class PedidoCRUD:
 
     def obtener_pedidos(self):
         """Obtiene todos los pedidos."""
+
         try:
             return self.db.query(Pedido).all()
         except Exception as e:
@@ -50,6 +53,7 @@ class PedidoCRUD:
         """Obtiene todos los pedidos de un cliente específico."""
         try:
             pedidos = self._buscar_pedidos_por_cliente(cliente_email)
+
             if not pedidos:
                 raise PedidoCRUDException(f"No se encontraron pedidos para el cliente con email '{cliente_email}'.")
             return pedidos
@@ -65,6 +69,7 @@ class PedidoCRUD:
 
         try:
             pedido = self._buscar_pedido_por_id(pedido_id)
+
             if not pedido:
                 raise PedidoCRUDException(f"Pedido con ID {pedido_id} no encontrado.")
             
@@ -84,6 +89,7 @@ class PedidoCRUD:
         """Elimina un pedido existente."""
         try:
             pedido = self._buscar_pedido_por_id(pedido_id)
+
             if not pedido:
                 raise PedidoCRUDException(f"Pedido con ID {pedido_id} no encontrado.")
             

@@ -36,6 +36,7 @@ class IngredienteCRUD:
     def listar_ingredientes(self):
         try:
             return self.conexion.query(Ingrediente).all()
+
         except Exception as e:
             raise IngredienteCRUDException(f"Error al listar ingredientes: {e}")
 
@@ -49,6 +50,7 @@ class IngredienteCRUD:
             raise IngredienteCRUDException(f"Error al buscar el ingrediente: {e}")
 
     def actualizar_ingrediente(self, ingrediente_id: int, nombre: str = None, tipo: str = None, unidad_medida: str = None, cantidad: int = None):
+
         if cantidad is not None and cantidad < 0:
             raise IngredienteCRUDException("La cantidad no puede ser negativa.")
 
@@ -84,13 +86,16 @@ class IngredienteCRUD:
 
             self.conexion.delete(ingrediente)
             self.conexion.commit()
+
             return f"Ingrediente con ID {ingrediente_id} eliminado correctamente."
+
         except IngredienteCRUDException as e:
             self.conexion.rollback()
             raise e
         except Exception as e:
             self.conexion.rollback()
             raise IngredienteCRUDException(f"Error inesperado al eliminar el ingrediente: {e}")
+
 
     def _buscar_ingrediente_por_nombre(self, nombre: str):
         """Método interno para buscar un ingrediente por su nombre."""
@@ -99,3 +104,5 @@ class IngredienteCRUD:
     def cerrar_sesion(self):
         """Cierra la sesión de la conexión."""
         self.conexion.close()
+
+        
