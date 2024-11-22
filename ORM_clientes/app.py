@@ -3,6 +3,7 @@ from tkinter import messagebox, ttk
 from database import get_session
 from crud.cliente_crud import *
 from sqlalchemy.exc import IntegrityError
+from crud.ingrediente_crud import *
 
 ctk.set_appearance_mode("System")  
 ctk.set_default_color_theme("blue") 
@@ -40,9 +41,100 @@ class App(ctk.CTk):
     # --- Pestaña de Ingredientes ---
     def init_ingredientes_tab(self, parent):
         """Inicializa la pestaña de ingredientes."""
-        frame = ctk.CTkFrame(parent)
-        frame.pack(pady=10, padx=10, fill="both", expand=True)
-        ctk.CTkLabel(frame, text="Gestión de Ingredientes").pack(pady=10, padx=10)
+        frame_superior = ctk.CTkFrame(parent)
+        frame_superior.pack(pady=10, padx=10, fill="x")
+
+        # Entradas para el nombre, tipo, unidad de medida y cantidad
+        ctk.CTkLabel(frame_superior, text="Nombre:").grid(row=0, column=0, pady=10, padx=10)
+        self.entry_nombre_ingrediente = ctk.CTkEntry(frame_superior)
+        self.entry_nombre_ingrediente.grid(row=0, column=1, pady=10, padx=10)
+
+        ctk.CTkLabel(frame_superior, text="Tipo:").grid(row=0, column=2, pady=10, padx=10)
+        self.entry_tipo_ingrediente = ctk.CTkEntry(frame_superior)
+        self.entry_tipo_ingrediente.grid(row=0, column=3, pady=10, padx=10)
+
+        ctk.CTkLabel(frame_superior, text="Unidad de Medida:").grid(row=1, column=0, pady=10, padx=10)
+        self.entry_unidad_medida_ingrediente = ctk.CTkEntry(frame_superior)
+        self.entry_unidad_medida_ingrediente.grid(row=1, column=1, pady=10, padx=10)
+
+        ctk.CTkLabel(frame_superior, text="Cantidad:").grid(row=1, column=2, pady=10, padx=10)
+        self.entry_cantidad_ingrediente = ctk.CTkEntry(frame_superior)
+        self.entry_cantidad_ingrediente.grid(row=1, column=3, pady=10, padx=10)
+
+        # Botones para agregar y eliminar ingredientes
+        ctk.CTkButton(frame_superior, text="Agregar Ingrediente", command=self.agregar_ingrediente).grid(row=2, column=1, pady=10, padx=10)
+        ctk.CTkButton(frame_superior, text="Eliminar Ingrediente", command=self.eliminar_ingrediente).grid(row=2, column=2, pady=10, padx=10)
+        
+        # Treeview para mostrar los ingredientes
+        frame_inferior = ctk.CTkFrame(parent)
+        frame_inferior.pack(pady=10, padx=10, fill="both", expand=True)
+
+        self.treeview_ingredientes = ttk.Treeview(frame_inferior, columns=("Nombre", "Tipo", "Unidad de Medida", "Cantidad"), show="headings")
+        self.treeview_ingredientes.heading("Nombre", text="Nombre")
+        self.treeview_ingredientes.heading("Tipo", text="Tipo")
+        self.treeview_ingredientes.heading("Unidad de Medida", text="Unidad de Medida")
+        self.treeview_ingredientes.heading("Cantidad", text="Cantidad")
+        self.treeview_ingredientes.pack(fill="both", expand=True)
+
+        # Cargar ingredientes iniciales
+        self.cargar_ingredientes()
+
+    def cargar_ingredientes(self):
+        """Carga los ingredientes en el Treeview."""
+        self.treeview_ingredientes.delete(*self.treeview_ingredientes.get_children())
+        with next(get_session()) as db:
+            ingredientes = IngredienteCRUD().listar_ingredientes()
+            for ingrediente in ingredientes:
+                self.treeview_ingredientes.insert("", "end", values=(ingrediente.nombre, ingrediente.tipo, ingrediente.unidad_medida, ingrediente.cantidad))
+
+    def agregar_ingrediente(self):
+        """Agrega un ingrediente o suma la cantidad si ya existe."""
+        nombre = self.entry_nombre_ingrediente.get().strip()
+        tipo = self.entry_tipo_ingrediente.get().strip()
+        unidad_medida = self.entry_unidad_medida_ingrediente.get().strip()
+        cantidad = self.entry_cantidad_ingrediente.get().strip()
+
+        if not nombre or not tipo or not unidad_medida or not cantidad.isdigit() or int(cantidad) <= 0:
+            messagebox.showwarning("Datos Inválidos", "Por favor, complete todos los campos con datos válidos.")
+            return
+
+        cantidad = int(cantidad)
+
+        try:
+            with next(get_session()) as db:
+                crud = IngredienteCRUD()
+                ingrediente = crud._buscar_ingrediente_por_nombre(nombre)
+                if ingrediente:
+                    # Si el ingrediente ya existe, sumar la cantidad
+                    crud.actualizar_ingrediente(ingrediente.id, cantidad=ingrediente.cantidad + cantidad)
+                else:
+                    # Crear nuevo ingrediente
+                    crud.crear_ingrediente(nombre, tipo, unidad_medida, cantidad)
+            self.cargar_ingredientes()
+            messagebox.showinfo("Éxito", "Ingrediente agregado correctamente.")
+        except IngredienteCRUDException as e:
+            messagebox.showerror("Error", str(e))
+    
+
+    def eliminar_ingrediente(self):
+        """Elimina un ingrediente seleccionado."""
+        selected_item = self.treeview_ingredientes.selection()
+        if not selected_item:
+            messagebox.showwarning("Selección", "Por favor, seleccione un ingrediente.")
+            return
+
+        nombre = self.treeview_ingredientes.item(selected_item)["values"][0]
+        try:
+            with next(get_session()) as db:
+                crud = IngredienteCRUD()
+                ingrediente = crud._buscar_ingrediente_por_nombre(nombre)
+                if ingrediente:
+                    crud.eliminar_ingrediente(ingrediente.id)
+            self.cargar_ingredientes()
+            messagebox.showinfo("Éxito", "Ingrediente eliminado correctamente.")
+        except IngredienteCRUDException as e:
+            messagebox.showerror("Error", str(e))
+
 
     # --- Pestaña de Menú ---
     def init_menu_tab(self, parent):
