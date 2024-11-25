@@ -2,6 +2,7 @@ import customtkinter as ctk
 from tkinter import messagebox, ttk
 from database import get_session
 from crud.cliente_crud import *
+from crud.pedido_crud import *
 from sqlalchemy.exc import IntegrityError
 
 ctk.set_appearance_mode("System")  
@@ -160,12 +161,159 @@ class App(ctk.CTk):
         frame.pack(pady=10, padx=10, fill="both", expand=True)
         ctk.CTkLabel(frame, text="Panel de Compra").pack(pady=10, padx=10)
 
+   # -----------------------------------------------------------------PEDIDOS-----------------------------------------------------------------
     # --- Pestaña de Pedidos ---
     def init_pedidos_tab(self, parent):
         """Inicializa la pestaña de pedidos."""
-        frame = ctk.CTkFrame(parent)
-        frame.pack(pady=10, padx=10, fill="both", expand=True)
-        ctk.CTkLabel(frame, text="Gestión de Pedidos").pack(pady=10, padx=10)
+        frame_superior = ctk.CTkFrame(parent)
+        frame_superior.pack(pady=10, padx=10, fill="x")
+
+        # Select para correos de clientes
+        ctk.CTkLabel(frame_superior, text="Correo Cliente:").grid(row=0, column=0, pady=10, padx=10)
+        with next(get_session()) as db:
+            self.clientes = ClienteCRUD(db).obtener_correos_clientes()
+        self.select_cliente = ctk.CTkOptionMenu(frame_superior, values=self.clientes)
+        self.select_cliente.grid(row=0, column=1, pady=10, padx=10)
+
+        # Campo de descripción
+        ctk.CTkLabel(frame_superior, text="Descripción:").grid(row=1, column=0, pady=10, padx=10)
+        self.entry_descripcion = ctk.CTkEntry(frame_superior, height=50, width=400)
+        self.entry_descripcion.grid(row=1, column=1, pady=10, padx=10)
+
+        # Campo de cantidad
+        ctk.CTkLabel(frame_superior, text="Cantidad:").grid(row=2, column=0, pady=10, padx=10)
+        self.entry_cantidad = ctk.CTkEntry(frame_superior)
+        self.entry_cantidad.grid(row=2, column=1, pady=10, padx=10)
+
+        # Botones de acción
+
+        ctk.CTkButton(
+            frame_superior, text="Crear Pedido", command=self.crear_pedido).grid(
+            row=4, column=0, pady=10, padx=10)
+        ctk.CTkButton(
+            frame_superior, text="Actualizar Pedido", command=self.actualizar_pedido).grid(
+            row=4, column=1, pady=10, padx=10)
+
+        # Botón de acción para eliminar
+        ctk.CTkButton(
+            frame_superior, text="Eliminar Pedido", command=self.eliminar_pedido).grid(
+            row=4, column=2, pady=10, padx=10)
+
+        frame_inferior = ctk.CTkFrame(parent)
+        frame_inferior.pack(pady=10, padx=10, fill="both", expand=True)
+
+        # Configuración del Treeview para mostrar pedidos
+        self.treeview_pedidos = ttk.Treeview(frame_inferior, columns=(
+            "ID Pedido", "Correo Cliente", "Descripción", "Fecha de creación", "Cantidad"), show="headings")
+        self.treeview_pedidos.heading("ID Pedido", text="ID Pedido")
+        self.treeview_pedidos.heading("Correo Cliente", text="Correo Cliente")
+        self.treeview_pedidos.heading("Descripción", text="Descripción")
+        self.treeview_pedidos.heading("Fecha de creación", text="Fecha de creación")
+        self.treeview_pedidos.heading("Cantidad", text="Cantidad")
+        self.treeview_pedidos.pack(fill="both", expand=True)
+
+        # Cargar pedidos al iniciar
+        self.cargar_pedidos()
+
+    def cargar_pedidos(self):
+        """Carga los pedidos en el Treeview."""
+        self.treeview_pedidos.delete(*self.treeview_pedidos.get_children())
+        with next(get_session()) as db:
+            pedidos = PedidoCRUD(db).obtener_pedidos()
+            for pedido in pedidos:
+                # Agregar el correo del cliente al mostrar
+                cliente = ClienteCRUD(db).obtener_cliente_por_email(pedido.cliente_email)
+                correo_cliente = cliente.email if cliente else "Desconocido"
+                self.treeview_pedidos.insert("", "end", values=(
+                    pedido.id, correo_cliente, pedido.descripcion, pedido.fecha_creacion, pedido.cantidad_menus))
+
+    def crear_pedido(self):
+        """Crea un nuevo pedido."""
+        correo_cliente = self.select_cliente.get()  # Correo seleccionado
+        descripcion = self.entry_descripcion.get()  # Descripción del pedido
+        cantidad = self.entry_cantidad.get()  # Cantidad del pedido
+
+        # Convertir la cantidad a entero (asegurándote de que sea un número válido)
+        try:
+            cantidad = int(cantidad)  # Convertir a entero
+        except ValueError:
+            messagebox.showwarning("Error", "La cantidad debe ser un número válido.")
+            return
+
+        # Validar que todos los campos estén completos
+        if correo_cliente and descripcion and cantidad > 0:
+            try:
+                with next(get_session()) as db:
+                    cliente = ClienteCRUD(db).obtener_cliente_por_email(correo_cliente)
+                    if cliente:
+                        # Crear pedido en la base de datos
+                        PedidoCRUD(db).crear_pedido(descripcion, cliente.email, cantidad)
+                        messagebox.showinfo("Éxito", "Pedido creado exitosamente.")
+                        self.cargar_pedidos()  # Recargar los pedidos
+                    else:
+                        messagebox.showwarning("Cliente no encontrado", "El cliente con ese correo no existe.")
+            except Exception as e:
+                messagebox.showwarning("Error", f"Ocurrió un error: {e}")
+        else:
+            messagebox.showwarning(
+                "Campos Vacíos", "Por favor, ingrese todos los campos y asegúrese de que la cantidad sea válida.")
+
+    def actualizar_pedido(self):
+        """Actualiza un pedido existente."""
+        correo_cliente = self.select_cliente.get()  # Correo seleccionado
+        descripcion = self.entry_descripcion.get()  # Nueva descripción del pedido
+        cantidad = self.entry_cantidad.get()  # Nueva cantidad del pedido
+
+        # Convertir la cantidad a entero (asegurándote de que sea un número válido)
+        try:
+            cantidad = int(cantidad)  # Convertir a entero
+        except ValueError:
+            messagebox.showwarning("Error", "La cantidad debe ser un número válido.")
+            return
+
+        # Validar si todos los campos están llenos
+        if correo_cliente and descripcion and cantidad > 0:
+            try:
+                with next(get_session()) as db:
+                    # Obtener el cliente por correo
+                    cliente = ClienteCRUD(db).obtener_cliente_por_email(correo_cliente)
+                    if cliente:
+                        # Obtener el ID del pedido seleccionado (debería obtenerse desde el Treeview)
+                        selected_item = self.treeview_pedidos.selection()
+                        if selected_item:
+                            pedido_id = self.treeview_pedidos.item(selected_item)["values"][0]  # ID del pedido
+                            # Actualizar el pedido en la base de datos
+                            PedidoCRUD(db).actualizar_pedido(pedido_id, descripcion, cantidad)
+                            self.cargar_pedidos()  # Recargar los pedidos
+                            messagebox.showinfo("Éxito", "Pedido actualizado correctamente.")
+                        else:
+                            messagebox.showwarning("Selección Incorrecta",
+                                                   "Por favor, seleccione un pedido para actualizar.")
+                    else:
+                        messagebox.showwarning("Error", "Cliente no encontrado.")
+            except Exception as e:
+                messagebox.showwarning("Error", f"Ocurrió un error: {e}")
+        else:
+            messagebox.showwarning("Campos Vacíos", "Por favor, ingrese todos los campos.")
+
+    def eliminar_pedido(self):
+        """Elimina un pedido seleccionado."""
+        selected_item = self.treeview_pedidos.selection()  # Obtenemos el pedido seleccionado
+        if selected_item:
+            pedido_id = self.treeview_pedidos.item(selected_item)["values"][0]  # ID del pedido
+            confirm = messagebox.askyesno("Confirmar Eliminación",
+                                          f"¿Estás seguro de eliminar el pedido con ID: {pedido_id}?")
+            if confirm:
+                try:
+                    with next(get_session()) as db:
+                        PedidoCRUD(db).eliminar_pedido(pedido_id)  # Eliminar pedido
+                        self.cargar_pedidos()  # Recargar los pedidos
+                        messagebox.showinfo("Éxito", "Pedido eliminado correctamente.")
+                except Exception as e:
+                    messagebox.showwarning("Error", f"Ocurrió un error al eliminar el pedido: {e}")
+        else:
+            messagebox.showwarning("Selección Incorrecta", "Por favor, seleccione un pedido para eliminar.")
+
 
     # --- Pestaña de Gráficos ---
     def init_graficos_tab(self, parent):

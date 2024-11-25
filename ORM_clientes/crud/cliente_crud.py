@@ -1,6 +1,7 @@
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 from models import Cliente
+from database import get_session
 
 class ClienteCRUDException(Exception):
     pass
@@ -104,4 +105,16 @@ class ClienteCRUD:
             return self.db.query(Cliente).filter(Cliente.nombre.ilike(f"%{nombre}%")).all()
         except Exception as e:
             raise ClienteCRUDException(f"Error al buscar clientes por nombre: {e}")
+        
+        
+    def obtener_correos_clientes(self):
+        """Obtiene los correos de los clientes desde la base de datos."""
+        with next(get_session()) as db:
+            clientes = ClienteCRUD(db).obtener_clientes()
+            correos = [cliente.email for cliente in clientes]  # Obtener solo los correos
+        return correos
+
+    def obtener_cliente_por_email(self, email):
+        """Obtiene un cliente por su correo electrónico."""
+        return self.db.query(Cliente).filter(Cliente.email == email).first()
 
