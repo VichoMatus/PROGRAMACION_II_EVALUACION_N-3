@@ -2,8 +2,11 @@ from sqlalchemy.orm import Session
 from sqlalchemy.sql import func
 from models import Pedido
 
+
 class PedidoCRUDException(Exception):
+    """Excepción personalizada para errores en PedidoCRUD."""
     pass
+
 
 class PedidoCRUD:
     def __init__(self, db: Session):
@@ -21,15 +24,17 @@ class PedidoCRUD:
         """Crea un nuevo pedido."""
         if cantidad_menus <= 0:
             raise PedidoCRUDException("La cantidad de menús debe ser mayor a 0.")
-        if len(descripcion.strip()) == 0:
+        if not descripcion.strip():
             raise PedidoCRUDException("La descripción no puede estar vacía.")
-        
+        if not cliente_email.strip():
+            raise PedidoCRUDException("El email del cliente no puede estar vacío.")
+
         try:
             nuevo_pedido = Pedido(
                 descripcion=descripcion,
                 cliente_email=cliente_email,
                 cantidad_menus=cantidad_menus,
-                fecha_creacion=func.now()
+                fecha_creacion=func.now(),
             )
             self.db.add(nuevo_pedido)
             self.db.commit()
@@ -60,17 +65,17 @@ class PedidoCRUD:
         """Actualiza un pedido existente."""
         if cantidad_menus is not None and cantidad_menus <= 0:
             raise PedidoCRUDException("La cantidad de menús debe ser mayor a 0.")
-        if descripcion and len(descripcion.strip()) == 0:
+        if descripcion and not descripcion.strip():
             raise PedidoCRUDException("La descripción no puede estar vacía.")
 
         try:
             pedido = self._buscar_pedido_por_id(pedido_id)
             if not pedido:
                 raise PedidoCRUDException(f"Pedido con ID {pedido_id} no encontrado.")
-            
+
             if descripcion:
                 pedido.descripcion = descripcion
-            if cantidad_menus:
+            if cantidad_menus is not None:
                 pedido.cantidad_menus = cantidad_menus
 
             self.db.commit()
@@ -86,7 +91,7 @@ class PedidoCRUD:
             pedido = self._buscar_pedido_por_id(pedido_id)
             if not pedido:
                 raise PedidoCRUDException(f"Pedido con ID {pedido_id} no encontrado.")
-            
+
             self.db.delete(pedido)
             self.db.commit()
             return True
